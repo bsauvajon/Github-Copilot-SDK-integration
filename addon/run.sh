@@ -31,14 +31,21 @@ if bashio::var.true "${HA_MCP_ENABLED}" || [ "${MCP_SERVER_COUNT}" -gt 0 ] 2>/de
     # request time, so the token never needs to be written in plaintext.
     if bashio::var.true "${HA_MCP_ENABLED}"; then
         bashio::log.info "Adding Home Assistant MCP server (auto-configured)..."
-        HA_ENTRY=$(jq -n '{
-            homeassistant: {
-                type: "http",
-                url: "http://homeassistant/mcp_server",
-                headers: { Authorization: "Bearer $SUPERVISOR_TOKEN" },
-                tools: ["*"]
-            }
-        }')
+        # The MCP endpoint is proxied by the Supervisor at /core/api/mcp.
+        # SUPERVISOR_TOKEN is injected automatically into every add-on container
+        # (homeassistant_api: true in config.yaml grants the required access).
+        # We write the resolved token value directly into the JSON file so the
+        # Copilot CLI does not need to expand environment variables itself.
+        HA_ENTRY=$(jq -n \
+            --arg token "${SUPERVISOR_TOKEN}" \
+            '{
+                homeassistant: {
+                    type: "http",
+                    url: "http://supervisor/core/api/mcp",
+                    headers: { Authorization: ("Bearer " + $token) },
+                    tools: ["*"]
+                }
+            }')
         MCP_SERVERS=$(echo "${MCP_SERVERS}" | jq --argjson ha "${HA_ENTRY}" '. + $ha')
     fi
 
