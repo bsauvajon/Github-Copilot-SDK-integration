@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- No add-on changes yet.
+### Added
+- **MCP server configuration via Home Assistant UI** — The add-on options now expose a structured `mcp_servers` list. Each entry supports local (stdio) and remote (HTTP/SSE) server types, with command, args, URL, environment variables, and tool selection. At startup, `run.sh` generates `~/.copilot/mcp-config.json` from this configuration.
+- **`jq` installed in container image** — Required to build the MCP JSON configuration file at runtime.
 
 ## [v3.9.8] - 2026-04-30
 

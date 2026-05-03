@@ -12,6 +12,50 @@ fi
 # GH_TOKEN is picked up automatically by the CLI without interactive prompts.
 export GH_TOKEN="${GITHUB_TOKEN}"
 
+# ---------------------------------------------------------------------------
+# Generate ~/.copilot/mcp-config.json from add-on options (if servers defined)
+# ---------------------------------------------------------------------------
+MCP_SERVER_COUNT=$(bashio::config 'mcp_servers | length')
+if [ "${MCP_SERVER_COUNT}" -gt 0 ] 2>/dev/null; then
+    bashio::log.info "Generating MCP server configuration (${MCP_SERVER_COUNT} server(s))..."
+    mkdir -p "${HOME}/.copilot"
+
+    # Build the mcpServers JSON object using jq.
+    # We iterate over each server and construct the appropriate shape:
+    #   - local/stdio servers: command + args + env
+    #   - http/sse servers:    url + (optional headers from env entries)
+    MCP_JSON=$(bashio::config 'mcp_servers' | jq 'reduce .[] as $s ({}; . + {
+        ($s.name): (
+            {
+                type: $s.type,
+                tools: (if $s | has("tools") and ($s.tools != null) and ($s.tools != "") then ($s.tools | split(",") | map(ltrimstr(" ") | rtrimstr(" "))) else ["*"] end)
+            }
+            +
+            # Local/stdio servers get command, args, env object
+            if ($s.type == "local" or $s.type == "stdio") then {
+                command: $s.command,
+                args: (if $s | has("args") then $s.args else [] end),
+                env: (if $s | has("env") and ($s.env | length) > 0
+                      then ($s.env | map({(.key): .value}) | add)
+                      else {} end)
+            }
+            # HTTP/SSE servers get url, headers object built from env entries
+            else {
+                url: $s.url,
+                headers: (if $s | has("env") and ($s.env | length) > 0
+                          then ($s.env | map({(.key): .value}) | add)
+                          else {} end)
+            }
+            end
+        )
+    }) | {mcpServers: .}')
+
+    echo "${MCP_JSON}" > "${HOME}/.copilot/mcp-config.json"
+    bashio::log.info "MCP configuration written to ${HOME}/.copilot/mcp-config.json"
+else
+    bashio::log.info "No MCP servers configured, skipping mcp-config.json generation."
+fi
+
 # Verify that the CLI can read auth state before attempting to start the server.
 # Newer Copilot CLI versions use prompt mode for this check, while older
 # versions support the dedicated 'auth status' command. Both checks are wrapped

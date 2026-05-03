@@ -5,7 +5,7 @@ FROM $BUILD_FROM
 # Debian natively supports glibc, so the Copilot CLI binary runs without
 # compatibility shims.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates tar \
+    && apt-get install -y --no-install-recommends curl ca-certificates tar jq \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

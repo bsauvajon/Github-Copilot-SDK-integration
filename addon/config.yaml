@@ -15,8 +15,20 @@ ports_description:
   8000/tcp: GitHub Copilot CLI server (internal only, accessible via add-on hostname on Supervisor network)
 options:
   github_token: ""
+  mcp_servers: []
 schema:
   github_token: password
+  mcp_servers:
+    - name: str
+      type: "list(local|stdio|http|sse)"
+      command: str?
+      args:
+        - str
+      url: str?
+      env:
+        - key: str
+          value: str
+      tools: str?
 init: false
 startup: application
 boot: auto
