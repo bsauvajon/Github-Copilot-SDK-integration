@@ -13,44 +13,70 @@ fi
 export GH_TOKEN="${GITHUB_TOKEN}"
 
 # ---------------------------------------------------------------------------
-# Generate ~/.copilot/mcp-config.json from add-on options (if servers defined)
+# Generate ~/.copilot/mcp-config.json from add-on options
 # ---------------------------------------------------------------------------
+HA_MCP_ENABLED=$(bashio::config 'ha_mcp_server')
 MCP_SERVER_COUNT=$(bashio::config 'mcp_servers | length')
-if [ "${MCP_SERVER_COUNT}" -gt 0 ] 2>/dev/null; then
-    bashio::log.info "Generating MCP server configuration (${MCP_SERVER_COUNT} server(s))..."
+
+if bashio::var.true "${HA_MCP_ENABLED}" || [ "${MCP_SERVER_COUNT}" -gt 0 ] 2>/dev/null; then
     mkdir -p "${HOME}/.copilot"
 
-    # Build the mcpServers JSON object using jq.
-    # We iterate over each server and construct the appropriate shape:
-    #   - local/stdio servers: command + args + env
-    #   - http/sse servers:    url + (optional headers from env entries)
-    MCP_JSON=$(bashio::config 'mcp_servers' | jq 'reduce .[] as $s ({}; . + {
-        ($s.name): (
-            {
-                type: $s.type,
-                tools: (if $s | has("tools") and ($s.tools != null) and ($s.tools != "") then ($s.tools | split(",") | map(ltrimstr(" ") | rtrimstr(" "))) else ["*"] end)
+    # Start from an empty mcpServers object.
+    MCP_SERVERS='{}'
+
+    # --- Home Assistant built-in MCP server (auto-configured) ---------------
+    # When enabled, Copilot connects to HA's native MCP server using the
+    # Supervisor token injected automatically into the container environment.
+    # The $SUPERVISOR_TOKEN placeholder is expanded by the Copilot CLI at
+    # request time, so the token never needs to be written in plaintext.
+    if bashio::var.true "${HA_MCP_ENABLED}"; then
+        bashio::log.info "Adding Home Assistant MCP server (auto-configured)..."
+        HA_ENTRY=$(jq -n '{
+            homeassistant: {
+                type: "http",
+                url: "http://homeassistant/mcp_server",
+                headers: { Authorization: "Bearer $SUPERVISOR_TOKEN" },
+                tools: ["*"]
             }
-            +
-            # Local/stdio servers get command, args, env object
-            if ($s.type == "local" or $s.type == "stdio") then {
-                command: $s.command,
-                args: (if $s | has("args") then $s.args else [] end),
-                env: (if $s | has("env") and ($s.env | length) > 0
-                      then ($s.env | map({(.key): .value}) | add)
-                      else {} end)
-            }
-            # HTTP/SSE servers get url, headers object built from env entries
-            else {
-                url: $s.url,
-                headers: (if $s | has("env") and ($s.env | length) > 0
+        }')
+        MCP_SERVERS=$(echo "${MCP_SERVERS}" | jq --argjson ha "${HA_ENTRY}" '. + $ha')
+    fi
+
+    # --- Manually configured MCP servers ------------------------------------
+    # Each entry supports local/stdio (command + args + env) and http/sse
+    # (url + headers built from env key/value pairs). Manual entries take
+    # precedence over the HA entry if they share the same server name.
+    if [ "${MCP_SERVER_COUNT}" -gt 0 ] 2>/dev/null; then
+        bashio::log.info "Adding ${MCP_SERVER_COUNT} manually configured MCP server(s)..."
+        MANUAL=$(bashio::config 'mcp_servers' | jq 'reduce .[] as $s ({}; . + {
+            ($s.name): (
+                {
+                    type: $s.type,
+                    tools: (if $s | has("tools") and ($s.tools != null) and ($s.tools != "")
+                            then ($s.tools | split(",") | map(ltrimstr(" ") | rtrimstr(" ")))
+                            else ["*"] end)
+                }
+                +
+                if ($s.type == "local" or $s.type == "stdio") then {
+                    command: $s.command,
+                    args: (if $s | has("args") then $s.args else [] end),
+                    env: (if $s | has("env") and ($s.env | length) > 0
                           then ($s.env | map({(.key): .value}) | add)
                           else {} end)
-            }
-            end
-        )
-    }) | {mcpServers: .}')
+                }
+                else {
+                    url: $s.url,
+                    headers: (if $s | has("env") and ($s.env | length) > 0
+                              then ($s.env | map({(.key): .value}) | add)
+                              else {} end)
+                }
+                end
+            )
+        })')
+        MCP_SERVERS=$(echo "${MCP_SERVERS}" | jq --argjson manual "${MANUAL}" '. + $manual')
+    fi
 
-    echo "${MCP_JSON}" > "${HOME}/.copilot/mcp-config.json"
+    echo "${MCP_SERVERS}" | jq '{mcpServers: .}' > "${HOME}/.copilot/mcp-config.json"
     bashio::log.info "MCP configuration written to ${HOME}/.copilot/mcp-config.json"
 else
     bashio::log.info "No MCP servers configured, skipping mcp-config.json generation."

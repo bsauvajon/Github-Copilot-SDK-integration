@@ -13,11 +13,14 @@ ports:
   8000/tcp: null
 ports_description:
   8000/tcp: GitHub Copilot CLI server (internal only, accessible via add-on hostname on Supervisor network)
+homeassistant_api: true
 options:
   github_token: ""
+  ha_mcp_server: false
   mcp_servers: []
 schema:
   github_token: password
+  ha_mcp_server: bool
   mcp_servers:
     - name: str
       type: "list(local|stdio|http|sse)"

@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **MCP server configuration via Home Assistant UI** — The add-on options now expose a structured `mcp_servers` list. Each entry supports local (stdio) and remote (HTTP/SSE) server types, with command, args, URL, environment variables, and tool selection. At startup, `run.sh` generates `~/.copilot/mcp-config.json` from this configuration.
+- **`ha_mcp_server` toggle** — Simple on/off switch in the add-on UI that automatically configures Copilot to connect to Home Assistant's built-in MCP server (`http://homeassistant/mcp_server`). Authentication uses the `SUPERVISOR_TOKEN` injected by the supervisor — no manual token or URL needed.
+- **`homeassistant_api: true`** permission added to the add-on so the Copilot CLI can reach the HA core MCP endpoint from within the container.
+- **MCP server configuration via Home Assistant UI** — The add-on options also expose a structured `mcp_servers` list for advanced users who want to add external MCP servers (local stdio or remote HTTP/SSE). Manual entries are merged with the HA entry and take precedence on name conflicts.
 - **`jq` installed in container image** — Required to build the MCP JSON configuration file at runtime.
 
 ## [v3.9.8] - 2026-04-30
